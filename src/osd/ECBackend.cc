@@ -1131,6 +1131,7 @@ void ECBackend::handle_sub_write_reply(
   ceph_assert(i != tid_to_op_map.end());
   if (op.committed) {
     trace.event("sub write committed");
+    dout(5) << __func__ << " sub write commited from " << i->second << dendl;
     ceph_assert(i->second.pending_commit.count(from));
     i->second.pending_commit.erase(from);
     if (from != get_parent()->whoami_shard()) {
@@ -1139,6 +1140,7 @@ void ECBackend::handle_sub_write_reply(
   }
   if (op.applied) {
     trace.event("sub write applied");
+    dout(5) << __func__ << " sub write applied from " << i->second << dendl;
     ceph_assert(i->second.pending_apply.count(from));
     i->second.pending_apply.erase(from);
   }
