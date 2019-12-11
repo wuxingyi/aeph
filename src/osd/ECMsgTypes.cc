@@ -146,6 +146,7 @@ std::ostream &operator<<(
 {
   return lhs
     << "ECSubWriteReply(tid=" << rhs.tid
+    << ", from_osd=" << rhs.from.osd
     << ", last_complete=" << rhs.last_complete
     << ", committed=" << rhs.committed
     << ", applied=" << rhs.applied << ")";
