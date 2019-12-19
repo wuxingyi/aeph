@@ -10526,6 +10526,8 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
 	remove_repop(to_remove);
       }
     }
+  } else {
+    dout(5) << "wuxingyidebug: eval_repop not all committed yet, not that fast" << dendl;
   }
 }
 
