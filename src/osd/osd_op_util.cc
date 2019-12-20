@@ -3,8 +3,8 @@
 
 #include "osd/osd_op_util.h"
 
-#include "osd/ClassHandler.h"
 #include "messages/MOSDOp.h"
+#include "osd/ClassHandler.h"
 
 bool OpInfo::check_rmw(int flag) const {
   ceph_assert(rmw_flags != 0);
@@ -27,9 +27,7 @@ bool OpInfo::rwordered() const {
 bool OpInfo::includes_pg_op() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_PGOP);
 }
-bool OpInfo::need_read_cap() const {
-  return check_rmw(CEPH_OSD_RMW_FLAG_READ);
-}
+bool OpInfo::need_read_cap() const { return check_rmw(CEPH_OSD_RMW_FLAG_READ); }
 bool OpInfo::need_write_cap() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
 }
@@ -46,9 +44,7 @@ bool OpInfo::allows_returnvec() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_RETURNVEC);
 }
 
-void OpInfo::set_rmw_flags(int flags) {
-  rmw_flags |= flags;
-}
+void OpInfo::set_rmw_flags(int flags) { rmw_flags |= flags; }
 
 void OpInfo::set_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ); }
 void OpInfo::set_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_WRITE); }
@@ -57,16 +53,18 @@ void OpInfo::set_class_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_WRITE); }
 void OpInfo::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
 void OpInfo::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
 void OpInfo::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
-void OpInfo::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
-void OpInfo::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
-void OpInfo::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
+void OpInfo::set_skip_handle_cache() {
+  set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE);
+}
+void OpInfo::set_skip_promote() {
+  set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
+}
+void OpInfo::set_force_rwordered() {
+  set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED);
+}
 void OpInfo::set_returnvec() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RETURNVEC); }
 
-
-int OpInfo::set_from_op(
-  const MOSDOp *m,
-  const OSDMap &osdmap)
-{
+int OpInfo::set_from_op(const MOSDOp *m, const OSDMap &osdmap) {
   vector<OSDOp>::const_iterator iter;
 
   // client flags have no bearing on whether an op is a read, write, etc.
@@ -82,7 +80,7 @@ int OpInfo::set_from_op(
   // set bits based on op codes, called methods.
   for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
     if ((iter->op.op == CEPH_OSD_OP_WATCH &&
-	 iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
+         iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
       /* This a bit odd.  PING isn't actually a write.  It can't
        * result in an update to the object_info.  PINGs also aren't
        * resent, so there's no reason to write out a log entry.
@@ -93,7 +91,7 @@ int OpInfo::set_from_op(
       set_force_rwordered();
     } else {
       if (ceph_osd_op_mode_modify(iter->op.op))
-	set_write();
+        set_write();
     }
     if (ceph_osd_op_mode_read(iter->op.op))
       set_read();
@@ -143,45 +141,44 @@ int OpInfo::set_from_op(
     }
 
     switch (iter->op.op) {
-    case CEPH_OSD_OP_CALL:
-      {
-	bufferlist::iterator bp = const_cast<bufferlist&>(iter->indata).begin();
-	int is_write, is_read;
-	string cname, mname;
-	bp.copy(iter->op.cls.class_len, cname);
-	bp.copy(iter->op.cls.method_len, mname);
+    case CEPH_OSD_OP_CALL: {
+      bufferlist::iterator bp = const_cast<bufferlist &>(iter->indata).begin();
+      int is_write, is_read;
+      string cname, mname;
+      bp.copy(iter->op.cls.class_len, cname);
+      bp.copy(iter->op.cls.method_len, mname);
 
-	ClassHandler::ClassData *cls;
-	int r = ClassHandler::get_instance().open_class(cname, &cls);
-	if (r) {
-	  if (r == -ENOENT)
-	    r = -EOPNOTSUPP;
-	  else if (r != -EPERM) // propagate permission errors
-	    r = -EIO;
-	  return r;
-	}
-	int flags = cls->get_method_flags(mname);
-	if (flags < 0) {
-	  if (flags == -ENOENT)
-	    r = -EOPNOTSUPP;
-	  else
-	    r = flags;
-	  return r;
-	}
-	is_read = flags & CLS_METHOD_RD;
-	is_write = flags & CLS_METHOD_WR;
-        bool is_promote = flags & CLS_METHOD_PROMOTE;
-
-	if (is_read)
-	  set_class_read();
-	if (is_write)
-	  set_class_write();
-        if (is_promote)
-          set_promote();
-        add_class(std::move(cname), std::move(mname), is_read, is_write,
-                      cls->whitelisted);
-	break;
+      ClassHandler::ClassData *cls;
+      int r = ClassHandler::get_instance().open_class(cname, &cls);
+      if (r) {
+        if (r == -ENOENT)
+          r = -EOPNOTSUPP;
+        else if (r != -EPERM) // propagate permission errors
+          r = -EIO;
+        return r;
       }
+      int flags = cls->get_method_flags(mname);
+      if (flags < 0) {
+        if (flags == -ENOENT)
+          r = -EOPNOTSUPP;
+        else
+          r = flags;
+        return r;
+      }
+      is_read = flags & CLS_METHOD_RD;
+      is_write = flags & CLS_METHOD_WR;
+      bool is_promote = flags & CLS_METHOD_PROMOTE;
+
+      if (is_read)
+        set_class_read();
+      if (is_write)
+        set_class_write();
+      if (is_promote)
+        set_promote();
+      add_class(std::move(cname), std::move(mname), is_read, is_write,
+                cls->whitelisted);
+      break;
+    }
 
     case CEPH_OSD_OP_WATCH:
       // force the read bit for watch since it is depends on previous
@@ -190,23 +187,21 @@ int OpInfo::set_from_op(
       set_read();
       // fall through
     case CEPH_OSD_OP_NOTIFY:
-    case CEPH_OSD_OP_NOTIFY_ACK:
-      {
-        set_promote();
-        break;
-      }
+    case CEPH_OSD_OP_NOTIFY_ACK: {
+      set_promote();
+      break;
+    }
 
     case CEPH_OSD_OP_DELETE:
       // if we get a delete with FAILOK we can skip handle cache. without
       // FAILOK we still need to promote (or do something smarter) to
       // determine whether to return ENOENT or 0.
-      if (iter == m->ops.begin() &&
-	  iter->op.flags == CEPH_OSD_OP_FLAG_FAILOK) {
-	set_skip_handle_cache();
+      if (iter == m->ops.begin() && iter->op.flags == CEPH_OSD_OP_FLAG_FAILOK) {
+        set_skip_handle_cache();
       }
       // skip promotion when proxying a delete op
       if (m->ops.size() == 1) {
-	set_skip_promote();
+        set_skip_promote();
       }
       break;
 
@@ -215,7 +210,7 @@ int OpInfo::set_from_op(
     case CEPH_OSD_OP_CACHE_EVICT:
       // If try_flush/flush/evict is the only op, can skip handle cache.
       if (m->ops.size() == 1) {
-	set_skip_handle_cache();
+        set_skip_handle_cache();
       }
       break;
 
@@ -245,12 +240,10 @@ int OpInfo::set_from_op(
     return -EINVAL;
 
   return 0;
-
 }
 
-ostream& operator<<(ostream& out, const OpInfo::ClassInfo& i)
-{
-  out << "class " << i.class_name << " method " << i.method_name
-      << " rd " << i.read << " wr " << i.write << " wl " << i.whitelisted;
+ostream &operator<<(ostream &out, const OpInfo::ClassInfo &i) {
+  out << "class " << i.class_name << " method " << i.method_name << " rd "
+      << i.read << " wr " << i.write << " wl " << i.whitelisted;
   return out;
 }

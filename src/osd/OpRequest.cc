@@ -1,17 +1,17 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
 #include "OpRequest.h"
 #include "common/Formatter.h"
-#include <iostream>
-#include <vector>
-#include "common/debug.h"
 #include "common/config.h"
-#include "msg/Message.h"
+#include "common/debug.h"
+#include "include/ceph_assert.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
-#include "include/ceph_assert.h"
+#include "msg/Message.h"
 #include "osd/osd_types.h"
+#include <iostream>
+#include <vector>
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -30,28 +30,25 @@ using std::stringstream;
 
 using ceph::Formatter;
 
-OpRequest::OpRequest(Message* req, OpTracker* tracker)
-    : TrackedOp(tracker, req->get_throttle_stamp()),
-      request(req),
-      hit_flag_points(0),
-      latest_flag_point(0),
-      hitset_inserted(false) {
+OpRequest::OpRequest(Message *req, OpTracker *tracker)
+    : TrackedOp(tracker, req->get_throttle_stamp()), request(req),
+      hit_flag_points(0), latest_flag_point(0), hitset_inserted(false) {
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
-    warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
+    warn_interval_multiplier =
+        tracker->cct->_conf->osd_recovery_op_warn_multiple;
   }
   if (req->get_type() == CEPH_MSG_OSD_OP) {
-    reqid = static_cast<MOSDOp*>(req)->get_reqid();
+    reqid = static_cast<MOSDOp *>(req)->get_reqid();
   } else if (req->get_type() == MSG_OSD_REPOP) {
-    reqid = static_cast<MOSDRepOp*>(req)->reqid;
+    reqid = static_cast<MOSDRepOp *>(req)->reqid;
   } else if (req->get_type() == MSG_OSD_REPOPREPLY) {
-    reqid = static_cast<MOSDRepOpReply*>(req)->reqid;
+    reqid = static_cast<MOSDRepOpReply *>(req)->reqid;
   }
   req_src_inst = req->get_source_inst();
 }
 
-void OpRequest::_dump(Formatter *f) const
-{
+void OpRequest::_dump(Formatter *f) const {
   Message *m = request;
   f->dump_string("flag_point", state_string());
   if (m->get_orig_source().is_client()) {
@@ -77,9 +74,9 @@ void OpRequest::_dump(Formatter *f) const
       auto i_next = i + 1;
 
       if (i_next < events.end()) {
-	f->dump_float("duration", i_next->stamp - i->stamp);
+        f->dump_float("duration", i_next->stamp - i->stamp);
       } else {
-	f->dump_float("duration", events.rbegin()->stamp - get_initiated());
+        f->dump_float("duration", events.rbegin()->stamp - get_initiated());
       }
 
       f->close_section();
@@ -88,8 +85,7 @@ void OpRequest::_dump(Formatter *f) const
   }
 }
 
-void OpRequest::_dump_op_descriptor_unlocked(ostream& stream) const
-{
+void OpRequest::_dump_op_descriptor_unlocked(ostream &stream) const {
   get_req()->print(stream);
 }
 
@@ -110,9 +106,9 @@ int OpRequest::maybe_init_op_info(const OSDMap &osdmap) {
   auto old_rmw_flags = op_info.get_flags();
 #endif
   auto ret = op_info.set_from_op(m, osdmap);
-  tracepoint(oprequest, set_rmw_flags, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc,
-	     op_info.get_flags(), old_rmw_flags, op_info.get_flags());
+  tracepoint(oprequest, set_rmw_flags, reqid.name._type, reqid.name._num,
+             reqid.tid, reqid.inc, op_info.get_flags(), old_rmw_flags,
+             op_info.get_flags());
   return ret;
 }
 
@@ -123,25 +119,24 @@ void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
   mark_event(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
-  tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, op_info.get_flags(),
-	     flag, s, old_flags, hit_flag_points);
+  tracepoint(oprequest, mark_flag_point, reqid.name._type, reqid.name._num,
+             reqid.tid, reqid.inc, op_info.get_flags(), flag, s, old_flags,
+             hit_flag_points);
 }
 
-void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
+void OpRequest::mark_flag_point_string(uint8_t flag, const string &s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif
   mark_event(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
-  tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, op_info.get_flags(),
-	     flag, s.c_str(), old_flags, hit_flag_points);
+  tracepoint(oprequest, mark_flag_point, reqid.name._type, reqid.name._num,
+             reqid.tid, reqid.inc, op_info.get_flags(), flag, s.c_str(),
+             old_flags, hit_flag_points);
 }
 
-bool OpRequest::filter_out(const set<string>& filters)
-{
+bool OpRequest::filter_out(const set<string> &filters) {
   set<entity_addr_t> addrs;
   for (auto it = filters.begin(); it != filters.end(); it++) {
     entity_addr_t addr;
@@ -167,4 +162,3 @@ bool OpRequest::filter_out(const set<string>& filters)
 
   return false;
 }
-

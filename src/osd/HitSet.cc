@@ -15,39 +15,36 @@
 #include "HitSet.h"
 #include "common/Formatter.h"
 
-using std::ostream;
-using std::list;
 using ceph::Formatter;
+using std::list;
+using std::ostream;
 
 // -- HitSet --
 
-HitSet::HitSet(const HitSet::Params& params)
-  : sealed(false)
-{
+HitSet::HitSet(const HitSet::Params &params) : sealed(false) {
   switch (params.get_type()) {
-  case TYPE_BLOOM:
-    {
-      BloomHitSet::Params *p =
-	static_cast<BloomHitSet::Params*>(params.impl.get());
-      impl.reset(new BloomHitSet(p));
-    }
-    break;
+  case TYPE_BLOOM: {
+    BloomHitSet::Params *p =
+        static_cast<BloomHitSet::Params *>(params.impl.get());
+    impl.reset(new BloomHitSet(p));
+  } break;
 
   case TYPE_EXPLICIT_HASH:
-    impl.reset(new ExplicitHashHitSet(static_cast<ExplicitHashHitSet::Params*>(params.impl.get())));
+    impl.reset(new ExplicitHashHitSet(
+        static_cast<ExplicitHashHitSet::Params *>(params.impl.get())));
     break;
 
   case TYPE_EXPLICIT_OBJECT:
-    impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params.impl.get())));
+    impl.reset(new ExplicitObjectHitSet(
+        static_cast<ExplicitObjectHitSet::Params *>(params.impl.get())));
     break;
 
   default:
-    assert (0 == "unknown HitSet type");
+    assert(0 == "unknown HitSet type");
   }
 }
 
-void HitSet::encode(ceph::buffer::list &bl) const
-{
+void HitSet::encode(ceph::buffer::list &bl) const {
   ENCODE_START(1, 1, bl);
   encode(sealed, bl);
   if (impl) {
@@ -59,8 +56,7 @@ void HitSet::encode(ceph::buffer::list &bl) const
   ENCODE_FINISH(bl);
 }
 
-void HitSet::decode(ceph::buffer::list::const_iterator& bl)
-{
+void HitSet::decode(ceph::buffer::list::const_iterator &bl) {
   DECODE_START(1, bl);
   decode(sealed, bl);
   __u8 type;
@@ -86,16 +82,14 @@ void HitSet::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void HitSet::dump(Formatter *f) const
-{
+void HitSet::dump(Formatter *f) const {
   f->dump_string("type", get_type_name());
   f->dump_string("sealed", sealed ? "yes" : "no");
   if (impl)
     impl->dump(f);
 }
 
-void HitSet::generate_test_instances(list<HitSet*>& o)
-{
+void HitSet::generate_test_instances(list<HitSet *> &o) {
   o.push_back(new HitSet);
   o.push_back(new HitSet(new BloomHitSet(10, .1, 1)));
   o.back()->insert(hobject_t());
@@ -111,8 +105,7 @@ void HitSet::generate_test_instances(list<HitSet*>& o)
   o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
 }
 
-HitSet::Params::Params(const Params& o) noexcept
-{
+HitSet::Params::Params(const Params &o) noexcept {
   if (o.get_type() != TYPE_NONE) {
     create_impl(o.get_type());
     // it's annoying to write virtual operator= methods; use encode/decode
@@ -124,8 +117,7 @@ HitSet::Params::Params(const Params& o) noexcept
   } // else we don't need to do anything
 }
 
-const HitSet::Params& HitSet::Params::operator=(const Params& o)
-{
+const HitSet::Params &HitSet::Params::operator=(const Params &o) {
   create_impl(o.get_type());
   if (o.impl) {
     // it's annoying to write virtual operator= methods; use encode/decode
@@ -138,8 +130,7 @@ const HitSet::Params& HitSet::Params::operator=(const Params& o)
   return *this;
 }
 
-void HitSet::Params::encode(ceph::buffer::list &bl) const
-{
+void HitSet::Params::encode(ceph::buffer::list &bl) const {
   ENCODE_START(1, 1, bl);
   if (impl) {
     encode((__u8)impl->get_type(), bl);
@@ -150,8 +141,7 @@ void HitSet::Params::encode(ceph::buffer::list &bl) const
   ENCODE_FINISH(bl);
 }
 
-bool HitSet::Params::create_impl(impl_type_t type)
-{
+bool HitSet::Params::create_impl(impl_type_t type) {
   switch ((impl_type_t)type) {
   case TYPE_EXPLICIT_HASH:
     impl.reset(new ExplicitHashHitSet::Params);
@@ -171,8 +161,7 @@ bool HitSet::Params::create_impl(impl_type_t type)
   return true;
 }
 
-void HitSet::Params::decode(ceph::buffer::list::const_iterator& bl)
-{
+void HitSet::Params::decode(ceph::buffer::list::const_iterator &bl) {
   DECODE_START(1, bl);
   __u8 type;
   decode(type, bl);
@@ -183,23 +172,21 @@ void HitSet::Params::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void HitSet::Params::dump(Formatter *f) const
-{
+void HitSet::Params::dump(Formatter *f) const {
   f->dump_string("type", HitSet::get_type_name(get_type()));
   if (impl)
     impl->dump(f);
 }
 
-void HitSet::Params::generate_test_instances(list<HitSet::Params*>& o)
-{
-#define loop_hitset_params(kind) \
-{ \
-  list<kind::Params*> params; \
-  kind::Params::generate_test_instances(params); \
-  for (list<kind::Params*>::iterator i = params.begin(); \
-  i != params.end(); ++i) \
-    o.push_back(new Params(*i)); \
-}
+void HitSet::Params::generate_test_instances(list<HitSet::Params *> &o) {
+#define loop_hitset_params(kind)                                               \
+  {                                                                            \
+    list<kind::Params *> params;                                               \
+    kind::Params::generate_test_instances(params);                             \
+    for (list<kind::Params *>::iterator i = params.begin(); i != params.end(); \
+         ++i)                                                                  \
+      o.push_back(new Params(*i));                                             \
+  }
   o.push_back(new Params);
   o.push_back(new Params(new BloomHitSet::Params));
   loop_hitset_params(BloomHitSet);
@@ -209,7 +196,7 @@ void HitSet::Params::generate_test_instances(list<HitSet::Params*>& o)
   loop_hitset_params(ExplicitObjectHitSet);
 }
 
-ostream& operator<<(ostream& out, const HitSet::Params& p) {
+ostream &operator<<(ostream &out, const HitSet::Params &p) {
   out << HitSet::get_type_name(p.get_type());
   if (p.impl) {
     out << "{";
@@ -219,13 +206,11 @@ ostream& operator<<(ostream& out, const HitSet::Params& p) {
   return out;
 }
 
-
 void ExplicitHashHitSet::dump(Formatter *f) const {
   f->dump_unsigned("insert_count", count);
   f->open_array_section("hash_set");
   for (ceph::unordered_set<uint32_t>::const_iterator p = hits.begin();
-       p != hits.end();
-       ++p)
+       p != hits.end(); ++p)
     f->dump_unsigned("hash", *p);
   f->close_section();
 }
@@ -234,8 +219,7 @@ void ExplicitObjectHitSet::dump(Formatter *f) const {
   f->dump_unsigned("insert_count", count);
   f->open_array_section("set");
   for (ceph::unordered_set<hobject_t>::const_iterator p = hits.begin();
-       p != hits.end();
-       ++p) {
+       p != hits.end(); ++p) {
     f->open_object_section("object");
     p->dump(f);
     f->close_section();

@@ -18,8 +18,8 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 
 #include <xfs/xfs.h>
 
@@ -31,18 +31,18 @@
 #define dout_context cct()
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
-#define dout_prefix *_dout << "xfsfilestorebackend(" << get_basedir_path() << ") "
+#define dout_prefix                                                            \
+  *_dout << "xfsfilestorebackend(" << get_basedir_path() << ") "
 
-XfsFileStoreBackend::XfsFileStoreBackend(FileStore *fs):
-  GenericFileStoreBackend(fs), m_has_extsize(false) { }
+XfsFileStoreBackend::XfsFileStoreBackend(FileStore *fs)
+    : GenericFileStoreBackend(fs), m_has_extsize(false) {}
 
 /*
  * Set extsize attr on a file to val.  Should be a free-standing
  * function, but dout_prefix expanding to a call to get_basedir_path()
  * protected member function won't let it.
  */
-int XfsFileStoreBackend::set_extsize(int fd, unsigned int val)
-{
+int XfsFileStoreBackend::set_extsize(int fd, unsigned int val) {
   struct fsxattr fsx;
   struct stat sb;
   int ret;
@@ -83,8 +83,7 @@ int XfsFileStoreBackend::set_extsize(int fd, unsigned int val)
   return 0;
 }
 
-int XfsFileStoreBackend::detect_features()
-{
+int XfsFileStoreBackend::detect_features() {
   int ret;
 
   ret = GenericFileStoreBackend::detect_features();
@@ -92,7 +91,7 @@ int XfsFileStoreBackend::detect_features()
     return ret;
 
   // extsize?
-  int fd = ::openat(get_basedir_fd(), "extsize_test", O_CREAT|O_WRONLY, 0600);
+  int fd = ::openat(get_basedir_fd(), "extsize_test", O_CREAT | O_WRONLY, 0600);
   if (fd < 0) {
     ret = -errno;
     dout(0) << "detect_feature: failed to create test file for extsize attr: "
@@ -110,7 +109,9 @@ int XfsFileStoreBackend::detect_features()
     ret = set_extsize(fd, 1U << 15); // a few pages
     if (ret) {
       ret = 0;
-      dout(0) << "detect_feature: failed to set test file extsize, assuming extsize is NOT supported" << dendl;
+      dout(0) << "detect_feature: failed to set test file extsize, assuming "
+                 "extsize is NOT supported"
+              << dendl;
       goto out_close;
     }
 
@@ -120,13 +121,19 @@ int XfsFileStoreBackend::detect_features()
     //   http://oss.sgi.com/bugzilla/show_bug.cgi?id=874
     int ver = get_linux_version();
     if (ver == 0) {
-      dout(0) << __func__ << ": couldn't verify extsize not buggy, disabling extsize" << dendl;
+      dout(0) << __func__
+              << ": couldn't verify extsize not buggy, disabling extsize"
+              << dendl;
       m_has_extsize = false;
     } else if (ver < KERNEL_VERSION(3, 5, 0)) {
-      dout(0) << __func__ << ": disabling extsize, your kernel < 3.5 and has buggy extsize ioctl" << dendl;
+      dout(0) << __func__
+              << ": disabling extsize, your kernel < 3.5 and has buggy extsize "
+                 "ioctl"
+              << dendl;
       m_has_extsize = false;
     } else {
-      dout(0) << __func__ << ": extsize is supported and your kernel >= 3.5" << dendl;
+      dout(0) << __func__ << ": extsize is supported and your kernel >= 3.5"
+              << dendl;
       m_has_extsize = true;
     }
   } else {
@@ -139,8 +146,7 @@ out:
   return ret;
 }
 
-int XfsFileStoreBackend::set_alloc_hint(int fd, uint64_t hint)
-{
+int XfsFileStoreBackend::set_alloc_hint(int fd, uint64_t hint) {
   if (!m_has_extsize)
     return -EOPNOTSUPP;
 

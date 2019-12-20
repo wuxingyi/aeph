@@ -4,11 +4,8 @@
 #include "FreelistManager.h"
 #include "BitmapFreelistManager.h"
 
-FreelistManager *FreelistManager::create(
-  CephContext* cct,
-  string type,
-  string prefix)
-{
+FreelistManager *FreelistManager::create(CephContext *cct, string type,
+                                         string prefix) {
   // a bit of a hack... we hard-code the prefixes here.  we need to
   // put the freelistmanagers in different prefixes because the merge
   // op is per prefix, has to done pre-db-open, and we don't know the
@@ -19,7 +16,6 @@ FreelistManager *FreelistManager::create(
   return NULL;
 }
 
-void FreelistManager::setup_merge_operators(KeyValueDB *db)
-{
+void FreelistManager::setup_merge_operators(KeyValueDB *db) {
   BitmapFreelistManager::setup_merge_operator(db, "b");
 }

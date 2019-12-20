@@ -13,9 +13,9 @@
  */
 
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #ifdef __linux__
 #include <linux/falloc.h>
@@ -38,8 +38,7 @@
 
 // ---------------
 
-FS *FS::create(uint64_t f_type)
-{
+FS *FS::create(uint64_t f_type) {
   switch (f_type) {
 #ifdef HAVE_LIBXFS
   case XFS_SUPER_MAGIC:
@@ -50,8 +49,7 @@ FS *FS::create(uint64_t f_type)
   }
 }
 
-FS *FS::create_by_fd(int fd)
-{
+FS *FS::create_by_fd(int fd) {
   struct statfs st;
   ::fstatfs(fd, &st);
   return create(st.f_type);
@@ -59,14 +57,12 @@ FS *FS::create_by_fd(int fd)
 
 // ---------------
 
-int FS::set_alloc_hint(int fd, uint64_t hint)
-{
-  return 0;  // no-op
+int FS::set_alloc_hint(int fd, uint64_t hint) {
+  return 0; // no-op
 }
 
 #ifdef HAVE_NAME_TO_HANDLE_AT
-int FS::get_handle(int fd, std::string *h)
-{
+int FS::get_handle(int fd, std::string *h) {
   char buf[sizeof(struct file_handle) + MAX_HANDLE_SZ];
   struct file_handle *fh = (struct file_handle *)buf;
   int mount_id;
@@ -80,8 +76,7 @@ int FS::get_handle(int fd, std::string *h)
   return 0;
 }
 
-int FS::open_handle(int mount_fd, const std::string& h, int flags)
-{
+int FS::open_handle(int mount_fd, const std::string &h, int flags) {
   if (h.length() < sizeof(struct file_handle)) {
     return -EINVAL;
   }
@@ -97,27 +92,20 @@ int FS::open_handle(int mount_fd, const std::string& h, int flags)
 
 #else // HAVE_NAME_TO_HANDLE_AT
 
-int FS::get_handle(int fd, std::string *h)
-{
-  return -EOPNOTSUPP;
-}
+int FS::get_handle(int fd, std::string *h) { return -EOPNOTSUPP; }
 
-int FS::open_handle(int mount_fd, const std::string& h, int flags)
-{
+int FS::open_handle(int mount_fd, const std::string &h, int flags) {
   return -EOPNOTSUPP;
 }
 
 #endif // HAVE_NAME_TO_HANDLE_AT
 
-int FS::copy_file_range(int to_fd, uint64_t to_offset,
-			int from_fd,
-			uint64_t from_offset, uint64_t from_len)
-{
+int FS::copy_file_range(int to_fd, uint64_t to_offset, int from_fd,
+                        uint64_t from_offset, uint64_t from_len) {
   ceph_abort_msg("write me");
 }
 
-int FS::zero(int fd, uint64_t offset, uint64_t length)
-{
+int FS::zero(int fd, uint64_t offset, uint64_t length) {
   int r;
 
   /*
@@ -151,19 +139,19 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
 
   */
 #if !defined(__APPLE__) && !defined(__FreeBSD__)
-# ifdef CEPH_HAVE_FALLOCATE
-#  ifdef FALLOC_FL_KEEP_SIZE
+#ifdef CEPH_HAVE_FALLOCATE
+#ifdef FALLOC_FL_KEEP_SIZE
   // first try fallocate
   r = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, length);
   if (r < 0) {
     r = -errno;
   }
   if (r != -EOPNOTSUPP) {
-    goto out;  // a real error
+    goto out; // a real error
   }
   // if that failed (-EOPNOTSUPP), fall back to writing zeros.
-#  endif
-# endif
+#endif
+#endif
 #endif
 
   {
@@ -178,9 +166,8 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
     r = bl.write_fd(fd);
   }
 
- out:
+out:
   return r;
 }
 
 // ---------------
-

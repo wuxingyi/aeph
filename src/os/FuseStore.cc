@@ -1,24 +1,23 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/compat.h"
 #include "FuseStore.h"
-#include "os/ObjectStore.h"
-#include "include/stringify.h"
 #include "common/errno.h"
+#include "include/compat.h"
+#include "include/stringify.h"
+#include "os/ObjectStore.h"
 
 #define FUSE_USE_VERSION 30
 #include <fuse.h>
 
+#include <fcntl.h> /* Definition of AT_* constants */
+#include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
-#include <fcntl.h>           /* Definition of AT_* constants */
-#include <sys/stat.h>
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
-#include <sys/param.h>
 #include <sys/mount.h>
+#include <sys/param.h>
 #endif
 
 #define dout_context store->cct
@@ -36,8 +35,7 @@ struct fs_info {
 };
 
 int FuseStore::open_file(string p, struct fuse_file_info *fi,
-			 std::function<int(bufferlist *bl)> f)
-{
+                         std::function<int(bufferlist *bl)> f) {
   if (open_files.count(p)) {
     OpenFile *o = open_files[p];
     fi->fh = reinterpret_cast<uint64_t>(o);
@@ -59,17 +57,11 @@ int FuseStore::open_file(string p, struct fuse_file_info *fi,
 }
 
 FuseStore::FuseStore(ObjectStore *s, string p)
-  : store(s),
-    mount_point(p),
-    fuse_thread(this)
-{
+    : store(s), mount_point(p), fuse_thread(this) {
   info = new fs_info();
 }
 
-FuseStore::~FuseStore()
-{
-  delete info;
-}
+FuseStore::~FuseStore() { delete info; }
 
 /*
  * / - root directory
@@ -85,7 +77,8 @@ FuseStore::~FuseStore()
  * $cid/all/$obj/data
  * $cid/all/$obj/omap/$key
  * $cid/all/$obj/attr/$name
- * $cid/by_bitwise_hash/$hash/$bits/$obj - all objects with this (bitwise) hash (prefix)
+ * $cid/by_bitwise_hash/$hash/$bits/$obj - all objects with this (bitwise) hash
+ * (prefix)
  */
 enum {
   FN_ROOT = 1,
@@ -107,17 +100,17 @@ enum {
   FN_HASH_VAL,
 };
 
-static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
-		    ghobject_t *oid, string *key,
-		    uint32_t *hash, uint32_t *hash_bits)
-{
+static int parse_fn(CephContext *cct, const char *path, coll_t *cid,
+                    ghobject_t *oid, string *key, uint32_t *hash,
+                    uint32_t *hash_bits) {
   list<string> v;
   for (const char *p = path; *p; ++p) {
     if (*p == '/')
       continue;
     const char *e;
-    for (e = p + 1; *e && *e != '/'; e++) ;
-    string c(p, e-p);
+    for (e = p + 1; *e && *e != '/'; e++)
+      ;
+    string c(p, e - p);
     v.push_back(c);
     p = e;
     if (!*p)
@@ -150,7 +143,7 @@ static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
       *oid = pgid.make_pgmeta_oid();
       v.pop_front();
       if (v.empty())
-	return FN_OBJECT;
+        return FN_OBJECT;
       goto do_object;
     }
     return -ENOENT;
@@ -179,7 +172,7 @@ static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
     if (hm < 1 || hm > 32)
       return -ENOENT;
     v.pop_front();
-    *hash = hv << shift;//hobject_t::_reverse_bits(hv << shift);
+    *hash = hv << shift; // hobject_t::_reverse_bits(hv << shift);
     *hash_bits = hm;
     if (v.empty())
       return FN_HASH_VAL;
@@ -187,18 +180,17 @@ static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
   }
   return -ENOENT;
 
- do_dir:
-  {
-    string o = v.front();
-    if (!oid->parse(o)) {
-      return -ENOENT;
-    }
-    v.pop_front();
-    if (v.empty())
-      return FN_OBJECT;
+do_dir : {
+  string o = v.front();
+  if (!oid->parse(o)) {
+    return -ENOENT;
   }
+  v.pop_front();
+  if (v.empty())
+    return FN_OBJECT;
+}
 
- do_object:
+do_object:
   if (v.front() == "data")
     return FN_OBJECT_DATA;
   if (v.front() == "omap_header")
@@ -228,18 +220,16 @@ static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
   return -ENOENT;
 }
 
-
-static int os_getattr(const char *path, struct stat *stbuf)
-{
+static int os_getattr(const char *path, struct stat *stbuf) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int t = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int t =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (t < 0)
     return t;
 
@@ -258,21 +248,19 @@ static int os_getattr(const char *path, struct stat *stbuf)
   case FN_OBJECT:
   case FN_OBJECT_DATA:
   case FN_OBJECT_OMAP_HEADER:
-  case FN_OBJECT_OMAP_VAL:
-    {
-      spg_t pgid;
-      if (cid.is_pg(&pgid)) {
-	if (!ch) {
-	  return -ENOENT;
-	}
-	int bits = fs->store->collection_bits(ch);
-	if (bits >= 0 && !oid.match(bits, pgid.ps())) {
-	  // sorry, not part of this PG
-	  return -ENOENT;
-	}
+  case FN_OBJECT_OMAP_VAL: {
+    spg_t pgid;
+    if (cid.is_pg(&pgid)) {
+      if (!ch) {
+        return -ENOENT;
+      }
+      int bits = fs->store->collection_bits(ch);
+      if (bits >= 0 && !oid.match(bits, pgid.ps())) {
+        // sorry, not part of this PG
+        return -ENOENT;
       }
     }
-    break;
+  } break;
   }
 
   switch (t) {
@@ -313,67 +301,58 @@ static int os_getattr(const char *path, struct stat *stbuf)
     stbuf->st_size = 9;
     return 0;
 
-  case FN_HASH_BITS:
-    {
-      if (!ch)
-	return -ENOENT;
-      int bits = fs->store->collection_bits(ch);
-      if (bits < 0)
-	return -ENOENT;
-      char buf[12];
-      snprintf(buf, sizeof(buf), "%d\n", bits);
-      stbuf->st_size = strlen(buf);
-    }
+  case FN_HASH_BITS: {
+    if (!ch)
+      return -ENOENT;
+    int bits = fs->store->collection_bits(ch);
+    if (bits < 0)
+      return -ENOENT;
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%d\n", bits);
+    stbuf->st_size = strlen(buf);
+  }
     return 0;
 
-  case FN_OBJECT_DATA:
-    {
-      if (!fs->store->exists(ch, oid))
-	return -ENOENT;
-      int r = fs->store->stat(ch, oid, stbuf);
-      if (r < 0)
-	return r;
-    }
-    break;
+  case FN_OBJECT_DATA: {
+    if (!fs->store->exists(ch, oid))
+      return -ENOENT;
+    int r = fs->store->stat(ch, oid, stbuf);
+    if (r < 0)
+      return r;
+  } break;
 
-  case FN_OBJECT_OMAP_HEADER:
-    {
-      if (!fs->store->exists(ch, oid))
-	return -ENOENT;
-      bufferlist bl;
-      fs->store->omap_get_header(ch, oid, &bl);
-      stbuf->st_size = bl.length();
-    }
-    break;
+  case FN_OBJECT_OMAP_HEADER: {
+    if (!fs->store->exists(ch, oid))
+      return -ENOENT;
+    bufferlist bl;
+    fs->store->omap_get_header(ch, oid, &bl);
+    stbuf->st_size = bl.length();
+  } break;
 
-  case FN_OBJECT_OMAP_VAL:
-    {
-      if (!fs->store->exists(ch, oid))
-	return -ENOENT;
-      set<string> k;
-      k.insert(key);
-      map<string,bufferlist> v;
-      fs->store->omap_get_values(ch, oid, k, &v);
-      if (!v.count(key)) {
-	return -ENOENT;
-      }
-      stbuf->st_size = v[key].length();
+  case FN_OBJECT_OMAP_VAL: {
+    if (!fs->store->exists(ch, oid))
+      return -ENOENT;
+    set<string> k;
+    k.insert(key);
+    map<string, bufferlist> v;
+    fs->store->omap_get_values(ch, oid, k, &v);
+    if (!v.count(key)) {
+      return -ENOENT;
     }
-    break;
+    stbuf->st_size = v[key].length();
+  } break;
 
-  case FN_OBJECT_ATTR_VAL:
-    {
-      if (!fs->store->exists(ch, oid))
-	return -ENOENT;
-      bufferptr v;
-      int r = fs->store->getattr(ch, oid, key.c_str(), v);
-      if (r == -ENODATA)
-	r = -ENOENT;
-      if (r < 0)
-	return r;
-      stbuf->st_size = v.length();
-    }
-    break;
+  case FN_OBJECT_ATTR_VAL: {
+    if (!fs->store->exists(ch, oid))
+      return -ENOENT;
+    bufferptr v;
+    int r = fs->store->getattr(ch, oid, key.c_str(), v);
+    if (r == -ENODATA)
+      r = -ENOENT;
+    if (r < 0)
+      return r;
+    stbuf->st_size = v.length();
+  } break;
 
   default:
     return -ENOENT;
@@ -382,22 +361,18 @@ static int os_getattr(const char *path, struct stat *stbuf)
   return 0;
 }
 
-static int os_readdir(const char *path,
-		      void *buf,
-		      fuse_fill_dir_t filler,
-		      off_t offset,
-		      struct fuse_file_info *fi)
-{
+static int os_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+                      off_t offset, struct fuse_file_info *fi) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
-  ldout(fs->store->cct, 10) << __func__ << " " << path << " offset " << offset
-		     << dendl;
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
+  ldout(fs->store->cct, 10)
+      << __func__ << " " << path << " offset " << offset << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int t = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int t =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (t < 0)
     return t;
 
@@ -409,162 +384,144 @@ static int os_readdir(const char *path,
   const int hash_shift = 31;
 
   switch (t) {
-  case FN_ROOT:
-    {
-      filler(buf, "type", NULL, 0);
-      vector<coll_t> cls;
-      fs->store->list_collections(cls);
-      for (auto c : cls) {
-	int r = filler(buf, stringify(c).c_str(), NULL, 0);
-	if (r > 0)
-	  break;
-      }
+  case FN_ROOT: {
+    filler(buf, "type", NULL, 0);
+    vector<coll_t> cls;
+    fs->store->list_collections(cls);
+    for (auto c : cls) {
+      int r = filler(buf, stringify(c).c_str(), NULL, 0);
+      if (r > 0)
+        break;
     }
-    break;
+  } break;
 
-  case FN_COLLECTION:
-    {
-      if (!ch) {
-	return -ENOENT;
-      }
-      filler(buf, "bitwise_hash_start", NULL, 0);
-      if (fs->store->collection_bits(ch) >= 0) {
-	filler(buf, "bitwise_hash_end", NULL, 0);
-	filler(buf, "bitwise_hash_bits", NULL, 0);
-      }
-      filler(buf, "all", NULL, 0);
-      filler(buf, "by_bitwise_hash", NULL, 0);
-      spg_t pgid;
-      if (cid.is_pg(&pgid) &&
-	  fs->store->exists(ch, pgid.make_pgmeta_oid())) {
-	filler(buf, "pgmeta", NULL, 0);
-      }
+  case FN_COLLECTION: {
+    if (!ch) {
+      return -ENOENT;
     }
-    break;
+    filler(buf, "bitwise_hash_start", NULL, 0);
+    if (fs->store->collection_bits(ch) >= 0) {
+      filler(buf, "bitwise_hash_end", NULL, 0);
+      filler(buf, "bitwise_hash_bits", NULL, 0);
+    }
+    filler(buf, "all", NULL, 0);
+    filler(buf, "by_bitwise_hash", NULL, 0);
+    spg_t pgid;
+    if (cid.is_pg(&pgid) && fs->store->exists(ch, pgid.make_pgmeta_oid())) {
+      filler(buf, "pgmeta", NULL, 0);
+    }
+  } break;
 
-  case FN_OBJECT:
-    {
-      filler(buf, "bitwise_hash", NULL, 0);
-      filler(buf, "data", NULL, 0);
-      filler(buf, "omap", NULL, 0);
-      filler(buf, "attr", NULL, 0);
-      filler(buf, "omap_header", NULL, 0);
-    }
-    break;
+  case FN_OBJECT: {
+    filler(buf, "bitwise_hash", NULL, 0);
+    filler(buf, "data", NULL, 0);
+    filler(buf, "omap", NULL, 0);
+    filler(buf, "attr", NULL, 0);
+    filler(buf, "omap_header", NULL, 0);
+  } break;
 
   case FN_HASH_VAL:
-  case FN_ALL:
-    {
-      uint32_t bitwise_hash = (offset >> hash_shift) & 0xffffffff;
-      uint32_t hashoff = offset - (bitwise_hash << hash_shift);
-      int skip = hashoff;
-      ghobject_t next = cid.get_min_hobj();
-      if (offset) {
-	// obey the offset
-	next.hobj.set_hash(hobject_t::_reverse_bits(bitwise_hash));
-      } else if (t == FN_HASH_VAL) {
-	next.hobj.set_hash(hobject_t::_reverse_bits(hash_value));
-      }
-      ghobject_t last;
-      if (t == FN_HASH_VAL) {
-	last = next;
-	uint64_t rev_end = (hash_value | (0xffffffff >> hash_bits)) + 1;
-	if (rev_end >= 0x100000000)
-	  last = ghobject_t::get_max();
-	else
-	  last.hobj.set_hash(hobject_t::_reverse_bits(rev_end));
-      } else {
-	last = ghobject_t::get_max();
-      }
-      ldout(fs->store->cct, 10) << __func__ << std::hex
-			 << " offset " << offset << " hash "
-			 << hobject_t::_reverse_bits(hash_value)
-			 << std::dec
-			 << "/" << hash_bits
-			 << " first " << next << " last " << last
-			 << dendl;
-      while (true) {
-	vector<ghobject_t> ls;
-	int r = fs->store->collection_list(
-	  ch, next, last, 1000, &ls, &next);
-	if (r < 0)
-	  return r;
-	for (auto p : ls) {
-	  if (skip) {
-	    --skip;
-	    continue;
-	  }
-	  uint32_t cur_bitwise_hash = p.hobj.get_bitwise_key_u32();
-	  if (cur_bitwise_hash != bitwise_hash) {
-	    bitwise_hash = cur_bitwise_hash;
-	    hashoff = 0;
-	  }
-	  ++hashoff;
-	  uint64_t cur_off = ((uint64_t)bitwise_hash << hash_shift) |
-	    (uint64_t)hashoff;
-	  string s = stringify(p);
-	  r = filler(buf, s.c_str(), NULL, cur_off);
-	  if (r)
-	    break;
-	}
-	if (r)
-	  break;
-	if (next == ghobject_t::get_max() || next == last)
-	  break;
-      }
+  case FN_ALL: {
+    uint32_t bitwise_hash = (offset >> hash_shift) & 0xffffffff;
+    uint32_t hashoff = offset - (bitwise_hash << hash_shift);
+    int skip = hashoff;
+    ghobject_t next = cid.get_min_hobj();
+    if (offset) {
+      // obey the offset
+      next.hobj.set_hash(hobject_t::_reverse_bits(bitwise_hash));
+    } else if (t == FN_HASH_VAL) {
+      next.hobj.set_hash(hobject_t::_reverse_bits(hash_value));
     }
-    break;
+    ghobject_t last;
+    if (t == FN_HASH_VAL) {
+      last = next;
+      uint64_t rev_end = (hash_value | (0xffffffff >> hash_bits)) + 1;
+      if (rev_end >= 0x100000000)
+        last = ghobject_t::get_max();
+      else
+        last.hobj.set_hash(hobject_t::_reverse_bits(rev_end));
+    } else {
+      last = ghobject_t::get_max();
+    }
+    ldout(fs->store->cct, 10)
+        << __func__ << std::hex << " offset " << offset << " hash "
+        << hobject_t::_reverse_bits(hash_value) << std::dec << "/" << hash_bits
+        << " first " << next << " last " << last << dendl;
+    while (true) {
+      vector<ghobject_t> ls;
+      int r = fs->store->collection_list(ch, next, last, 1000, &ls, &next);
+      if (r < 0)
+        return r;
+      for (auto p : ls) {
+        if (skip) {
+          --skip;
+          continue;
+        }
+        uint32_t cur_bitwise_hash = p.hobj.get_bitwise_key_u32();
+        if (cur_bitwise_hash != bitwise_hash) {
+          bitwise_hash = cur_bitwise_hash;
+          hashoff = 0;
+        }
+        ++hashoff;
+        uint64_t cur_off =
+            ((uint64_t)bitwise_hash << hash_shift) | (uint64_t)hashoff;
+        string s = stringify(p);
+        r = filler(buf, s.c_str(), NULL, cur_off);
+        if (r)
+          break;
+      }
+      if (r)
+        break;
+      if (next == ghobject_t::get_max() || next == last)
+        break;
+    }
+  } break;
 
-  case FN_OBJECT_OMAP:
-    {
-      set<string> keys;
-      fs->store->omap_get_keys(ch, oid, &keys);
-      unsigned skip = offset;
-      for (auto k : keys) {
-	if (skip) {
-	  --skip;
-	  continue;
-	}
-	++offset;
-	int r = filler(buf, k.c_str(), NULL, offset);
-	if (r)
-	  break;
+  case FN_OBJECT_OMAP: {
+    set<string> keys;
+    fs->store->omap_get_keys(ch, oid, &keys);
+    unsigned skip = offset;
+    for (auto k : keys) {
+      if (skip) {
+        --skip;
+        continue;
       }
+      ++offset;
+      int r = filler(buf, k.c_str(), NULL, offset);
+      if (r)
+        break;
     }
-    break;
+  } break;
 
-  case FN_OBJECT_ATTR:
-    {
-      map<string,bufferptr> aset;
-      fs->store->getattrs(ch, oid, aset);
-      unsigned skip = offset;
-      for (auto a : aset) {
-	if (skip) {
-	  --skip;
-	  continue;
-	}
-	++offset;
-	int r = filler(buf, a.first.c_str(), NULL, offset);
-	if (r)
-	  break;
+  case FN_OBJECT_ATTR: {
+    map<string, bufferptr> aset;
+    fs->store->getattrs(ch, oid, aset);
+    unsigned skip = offset;
+    for (auto a : aset) {
+      if (skip) {
+        --skip;
+        continue;
       }
+      ++offset;
+      int r = filler(buf, a.first.c_str(), NULL, offset);
+      if (r)
+        break;
     }
-    break;
+  } break;
   }
   return 0;
 }
 
-static int os_open(const char *path, struct fuse_file_info *fi)
-{
+static int os_open(const char *path, struct fuse_file_info *fi) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int t = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int t =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (t < 0)
     return t;
 
@@ -580,133 +537,109 @@ static int os_open(const char *path, struct fuse_file_info *fi)
     pbl->append("\n");
     break;
 
-  case FN_HASH_START:
-    {
-      pbl = new bufferlist;
-      spg_t pgid;
-      if (cid.is_pg(&pgid)) {
-	unsigned long h;
-	h = hobject_t::_reverse_bits(pgid.ps());
-	char buf[10];
-	snprintf(buf, sizeof(buf), "%08lx\n", h);
-	pbl->append(buf);
-      } else {
-	pbl->append("00000000\n");
-      }
-    }
-    break;
-
-  case FN_HASH_END:
-    {
-      if (!ch) {
-	return -ENOENT;
-      }
-      spg_t pgid;
+  case FN_HASH_START: {
+    pbl = new bufferlist;
+    spg_t pgid;
+    if (cid.is_pg(&pgid)) {
       unsigned long h;
-      if (cid.is_pg(&pgid)) {
-	int hash_bits = fs->store->collection_bits(ch);
-	if (hash_bits >= 0) {
-	  uint64_t rev_start = hobject_t::_reverse_bits(pgid.ps());
-	  uint64_t rev_end = (rev_start | (0xffffffff >> hash_bits));
-	  h = rev_end;
-	} else {
-	  return -ENOENT;
-	}
-      } else {
-	h = 0xffffffff;
-      }
+      h = hobject_t::_reverse_bits(pgid.ps());
       char buf[10];
       snprintf(buf, sizeof(buf), "%08lx\n", h);
-      pbl = new bufferlist;
       pbl->append(buf);
+    } else {
+      pbl->append("00000000\n");
     }
-    break;
+  } break;
 
-  case FN_HASH_BITS:
-    {
-      if (!ch) {
-	return -ENOENT;
+  case FN_HASH_END: {
+    if (!ch) {
+      return -ENOENT;
+    }
+    spg_t pgid;
+    unsigned long h;
+    if (cid.is_pg(&pgid)) {
+      int hash_bits = fs->store->collection_bits(ch);
+      if (hash_bits >= 0) {
+        uint64_t rev_start = hobject_t::_reverse_bits(pgid.ps());
+        uint64_t rev_end = (rev_start | (0xffffffff >> hash_bits));
+        h = rev_end;
+      } else {
+        return -ENOENT;
       }
-      int r = fs->store->collection_bits(ch);
+    } else {
+      h = 0xffffffff;
+    }
+    char buf[10];
+    snprintf(buf, sizeof(buf), "%08lx\n", h);
+    pbl = new bufferlist;
+    pbl->append(buf);
+  } break;
+
+  case FN_HASH_BITS: {
+    if (!ch) {
+      return -ENOENT;
+    }
+    int r = fs->store->collection_bits(ch);
+    if (r < 0)
+      return r;
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%d\n", r);
+    pbl = new bufferlist;
+    pbl->append(buf);
+  } break;
+
+  case FN_OBJECT_HASH: {
+    pbl = new bufferlist;
+    char buf[10];
+    snprintf(buf, sizeof(buf), "%08x\n",
+             (unsigned)oid.hobj.get_bitwise_key_u32());
+    pbl->append(buf);
+  } break;
+
+  case FN_OBJECT_DATA: {
+    int r = fs->open_file(path, fi, [&](bufferlist *pbl) {
+      return fs->store->read(ch, oid, 0, 0, *pbl);
+    });
+    if (r < 0) {
+      return r;
+    }
+  } break;
+
+  case FN_OBJECT_ATTR_VAL: {
+    int r = fs->open_file(path, fi, [&](bufferlist *pbl) {
+      bufferptr bp;
+      int r = fs->store->getattr(ch, oid, key.c_str(), bp);
       if (r < 0)
         return r;
-      char buf[12];
-      snprintf(buf, sizeof(buf), "%d\n", r);
-      pbl = new bufferlist;
-      pbl->append(buf);
-    }
-    break;
+      pbl->append(bp);
+      return 0;
+    });
+    if (r < 0)
+      return r;
+  } break;
 
-  case FN_OBJECT_HASH:
-    {
-      pbl = new bufferlist;
-      char buf[10];
-      snprintf(buf, sizeof(buf), "%08x\n",
-	       (unsigned)oid.hobj.get_bitwise_key_u32());
-      pbl->append(buf);
-    }
-    break;
-
-  case FN_OBJECT_DATA:
-    {
-      int r = fs->open_file(
-	path, fi,
-	[&](bufferlist *pbl) {
-	  return fs->store->read(ch, oid, 0, 0, *pbl);
-	});
-      if (r < 0) {
-        return r;
-      }
-    }
-    break;
-
-  case FN_OBJECT_ATTR_VAL:
-    {
-      int r = fs->open_file(
-	path, fi,
-	[&](bufferlist *pbl) {
-	  bufferptr bp;
-	  int r = fs->store->getattr(ch, oid, key.c_str(), bp);
-	  if (r < 0)
-	    return r;
-	  pbl->append(bp);
-	  return 0;
-	});
+  case FN_OBJECT_OMAP_VAL: {
+    int r = fs->open_file(path, fi, [&](bufferlist *pbl) {
+      set<string> k;
+      k.insert(key);
+      map<string, bufferlist> v;
+      int r = fs->store->omap_get_values(ch, oid, k, &v);
       if (r < 0)
         return r;
-    }
-    break;
+      *pbl = v[key];
+      return 0;
+    });
+    if (r < 0)
+      return r;
+  } break;
 
-  case FN_OBJECT_OMAP_VAL:
-    {
-      int r = fs->open_file(
-	path, fi,
-	[&](bufferlist *pbl) {
-	  set<string> k;
-	  k.insert(key);
-	  map<string,bufferlist> v;
-	  int r = fs->store->omap_get_values(ch, oid, k, &v);
-	  if (r < 0)
-	    return r;
-	  *pbl = v[key];
-	  return 0;
-	});
-      if (r < 0)
-	return r;
-    }
-    break;
-
-  case FN_OBJECT_OMAP_HEADER:
-    {
-      int r = fs->open_file(
-	path, fi,
-	[&](bufferlist *pbl) {
-	  return fs->store->omap_get_header(ch, oid, pbl);
-	});
-      if (r < 0)
-       return r;
-    }
-    break;
+  case FN_OBJECT_OMAP_HEADER: {
+    int r = fs->open_file(path, fi, [&](bufferlist *pbl) {
+      return fs->store->omap_get_header(ch, oid, pbl);
+    });
+    if (r < 0)
+      return r;
+  } break;
   }
 
   if (pbl) {
@@ -717,17 +650,16 @@ static int os_open(const char *path, struct fuse_file_info *fi)
   return 0;
 }
 
-static int os_mkdir(const char *path, mode_t mode)
-{
+static int os_mkdir(const char *path, mode_t mode) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int f = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int f =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (f < 0)
     return f;
 
@@ -737,24 +669,22 @@ static int os_mkdir(const char *path, mode_t mode)
 
   ObjectStore::Transaction t;
   switch (f) {
-  case FN_OBJECT:
-    {
-      ch = fs->store->open_collection(cid);
-      if (!ch) {
-	return -ENOENT;
-      }
-      spg_t pgid;
-      if (cid.is_pg(&pgid)) {
-	int bits = fs->store->collection_bits(ch);
-	if (bits >= 0 && !oid.match(bits, pgid.ps())) {
-	  // sorry, not part of this PG
-	  return -EINVAL;
-	}
-      }
-      t.touch(cid, oid);
-      ch = fs->store->open_collection(cid);
+  case FN_OBJECT: {
+    ch = fs->store->open_collection(cid);
+    if (!ch) {
+      return -ENOENT;
     }
-    break;
+    spg_t pgid;
+    if (cid.is_pg(&pgid)) {
+      int bits = fs->store->collection_bits(ch);
+      if (bits >= 0 && !oid.match(bits, pgid.ps())) {
+        // sorry, not part of this PG
+        return -EINVAL;
+      }
+    }
+    t.touch(cid, oid);
+    ch = fs->store->open_collection(cid);
+  } break;
 
   case FN_COLLECTION:
     if (cid.is_pg()) {
@@ -762,7 +692,7 @@ static int os_mkdir(const char *path, mode_t mode)
       // mnt/0.7_head will create 0.7 with bits = 3.
       mode &= 0777;
       if (mode >= 32)
-	return -EINVAL;
+        return -EINVAL;
     } else {
       mode = 0;
     }
@@ -781,25 +711,23 @@ static int os_mkdir(const char *path, mode_t mode)
   return 0;
 }
 
-static int os_chmod(const char *path, mode_t mode)
-{
+static int os_chmod(const char *path, mode_t mode) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   return 0;
 }
 
-static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
-{
+static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int f = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int f =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (f < 0)
     return f;
 
@@ -810,42 +738,36 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   ObjectStore::Transaction t;
   bufferlist *pbl = 0;
   switch (f) {
-  case FN_OBJECT_DATA:
-    {
-      pbl = new bufferlist;
-      fs->store->read(ch, oid, 0, 0, *pbl);
-    }
-    break;
+  case FN_OBJECT_DATA: {
+    pbl = new bufferlist;
+    fs->store->read(ch, oid, 0, 0, *pbl);
+  } break;
 
-  case FN_OBJECT_ATTR_VAL:
-    {
-      pbl = new bufferlist;
-      bufferptr bp;
-      int r = fs->store->getattr(ch, oid, key.c_str(), bp);
-      if (r == -ENODATA) {
-	bufferlist empty;
-	t.setattr(cid, oid, key.c_str(), empty);
-      }
-      pbl->append(bp);
+  case FN_OBJECT_ATTR_VAL: {
+    pbl = new bufferlist;
+    bufferptr bp;
+    int r = fs->store->getattr(ch, oid, key.c_str(), bp);
+    if (r == -ENODATA) {
+      bufferlist empty;
+      t.setattr(cid, oid, key.c_str(), empty);
     }
-    break;
+    pbl->append(bp);
+  } break;
 
-  case FN_OBJECT_OMAP_VAL:
-    {
-      pbl = new bufferlist;
-      set<string> k;
-      k.insert(key);
-      map<string,bufferlist> v;
-      fs->store->omap_get_values(ch, oid, k, &v);
-      if (v.count(key) == 0) {
-	map<string,bufferlist> aset;
-	aset[key] = bufferlist();
-	t.omap_setkeys(cid, oid, aset);
-      } else {
-	*pbl = v[key];
-      }
+  case FN_OBJECT_OMAP_VAL: {
+    pbl = new bufferlist;
+    set<string> k;
+    k.insert(key);
+    map<string, bufferlist> v;
+    fs->store->omap_get_values(ch, oid, k, &v);
+    if (v.count(key) == 0) {
+      map<string, bufferlist> aset;
+      aset[key] = bufferlist();
+      t.omap_setkeys(cid, oid, aset);
+    } else {
+      *pbl = v[key];
     }
-    break;
+  } break;
   }
 
   if (!t.empty()) {
@@ -861,15 +783,15 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   return 0;
 }
 
-static int os_release(const char *path, struct fuse_file_info *fi)
-{
+static int os_release(const char *path, struct fuse_file_info *fi) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   std::lock_guard<std::mutex> l(fs->lock);
-  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile *>(fi->fh);
   if (--o->ref == 0) {
-    ldout(fs->store->cct, 10) << __func__ << " closing last " << o->path << dendl;
+    ldout(fs->store->cct, 10)
+        << __func__ << " closing last " << o->path << dendl;
     fs->open_files.erase(o->path);
     delete o;
   }
@@ -877,14 +799,13 @@ static int os_release(const char *path, struct fuse_file_info *fi)
 }
 
 static int os_read(const char *path, char *buf, size_t size, off_t offset,
-		   struct fuse_file_info *fi)
-{
+                   struct fuse_file_info *fi) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << " offset " << offset
-		     << " size " << size << dendl;
+                            << " size " << size << dendl;
   std::lock_guard<std::mutex> l(fs->lock);
-  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile *>(fi->fh);
   if (!o)
     return 0;
   if (offset >= o->bl.length())
@@ -898,14 +819,13 @@ static int os_read(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int os_write(const char *path, const char *buf, size_t size,
-		    off_t offset, struct fuse_file_info *fi)
-{
+                    off_t offset, struct fuse_file_info *fi) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << " offset " << offset
-		     << " size " << size << dendl;
+                            << " size " << size << dendl;
   std::lock_guard<std::mutex> l(fs->lock);
-  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile *>(fi->fh);
   if (!o)
     return 0;
 
@@ -930,23 +850,22 @@ static int os_write(const char *path, const char *buf, size_t size,
   return size;
 }
 
-int os_flush(const char *path, struct fuse_file_info *fi)
-{
+int os_flush(const char *path, struct fuse_file_info *fi) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int f = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int f =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (f < 0)
     return f;
 
   std::lock_guard<std::mutex> l(fs->lock);
 
-  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile *>(fi->fh);
   if (!o)
     return 0;
   if (!o->dirty)
@@ -965,13 +884,12 @@ int os_flush(const char *path, struct fuse_file_info *fi)
     t.setattr(cid, oid, key.c_str(), o->bl);
     break;
 
-  case FN_OBJECT_OMAP_VAL:
-    {
-      map<string,bufferlist> aset;
-      aset[key] = o->bl;
-      t.omap_setkeys(cid, oid, aset);
-      break;
-    }
+  case FN_OBJECT_OMAP_VAL: {
+    map<string, bufferlist> aset;
+    aset[key] = o->bl;
+    t.omap_setkeys(cid, oid, aset);
+    break;
+  }
 
   case FN_OBJECT_OMAP_HEADER:
     t.omap_setheader(cid, oid, o->bl);
@@ -986,17 +904,16 @@ int os_flush(const char *path, struct fuse_file_info *fi)
   return 0;
 }
 
-static int os_unlink(const char *path)
-{
+static int os_unlink(const char *path) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int f = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int f =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (f < 0)
     return f;
 
@@ -1006,40 +923,34 @@ static int os_unlink(const char *path)
   ObjectStore::Transaction t;
 
   switch (f) {
-  case FN_OBJECT_OMAP_VAL:
-    {
-      set<string> keys;
-      keys.insert(key);
-      t.omap_rmkeys(cid, oid, keys);
-    }
-    break;
+  case FN_OBJECT_OMAP_VAL: {
+    set<string> keys;
+    keys.insert(key);
+    t.omap_rmkeys(cid, oid, keys);
+  } break;
 
   case FN_OBJECT_ATTR_VAL:
     t.rmattr(cid, oid, key.c_str());
     break;
 
-  case FN_OBJECT_OMAP_HEADER:
-    {
-      bufferlist empty;
-      t.omap_setheader(cid, oid, empty);
-    }
-    break;
+  case FN_OBJECT_OMAP_HEADER: {
+    bufferlist empty;
+    t.omap_setheader(cid, oid, empty);
+  } break;
 
   case FN_OBJECT:
     t.remove(cid, oid);
     break;
 
-  case FN_COLLECTION:
-    {
-      bool empty;
-      int r = fs->store->collection_empty(ch, &empty);
-      if (r < 0)
-        return r;
-      if (!empty)
-        return -ENOTEMPTY;
-      t.remove_collection(cid);
-    }
-    break;
+  case FN_COLLECTION: {
+    bool empty;
+    int r = fs->store->collection_empty(ch, &empty);
+    if (r < 0)
+      return r;
+    if (!empty)
+      return -ENOTEMPTY;
+    t.remove_collection(cid);
+  } break;
 
   case FN_OBJECT_DATA:
     t.truncate(cid, oid, 0);
@@ -1054,22 +965,21 @@ static int os_unlink(const char *path)
   return 0;
 }
 
-static int os_truncate(const char *path, off_t size)
-{
+static int os_truncate(const char *path, off_t size) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
-  ldout(fs->store->cct, 10) << __func__ << " " << path << " size " << size << dendl;
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
+  ldout(fs->store->cct, 10)
+      << __func__ << " " << path << " size " << size << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
   uint32_t hash_value, hash_bits;
-  int f = parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value,
-		   &hash_bits);
+  int f =
+      parse_fn(fs->store->cct, path, &cid, &oid, &key, &hash_value, &hash_bits);
   if (f < 0)
     return f;
 
-  if (f == FN_OBJECT_OMAP_VAL ||
-      f == FN_OBJECT_ATTR_VAL ||
+  if (f == FN_OBJECT_OMAP_VAL || f == FN_OBJECT_ATTR_VAL ||
       f == FN_OBJECT_OMAP_HEADER) {
     if (size)
       return -EPERM;
@@ -1096,10 +1006,9 @@ static int os_truncate(const char *path, off_t size)
   return 0;
 }
 
-static int os_statfs(const char *path, struct statvfs *stbuf)
-{
+static int os_statfs(const char *path, struct statvfs *stbuf) {
   fuse_context *fc = fuse_get_context();
-  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  FuseStore *fs = static_cast<FuseStore *>(fc->private_data);
   ldout(fs->store->cct, 10) << __func__ << " " << path << dendl;
   std::lock_guard<std::mutex> l(fs->lock);
 
@@ -1107,83 +1016,79 @@ static int os_statfs(const char *path, struct statvfs *stbuf)
   int r = fs->store->statfs(&s);
   if (r < 0)
     return r;
-  stbuf->f_bsize = 4096;   // LIES!
+  stbuf->f_bsize = 4096; // LIES!
   stbuf->f_blocks = s.total / 4096;
   stbuf->f_bavail = s.available / 4096;
   stbuf->f_bfree = stbuf->f_bavail;
 
-  ldout(fs->store->cct, 10) << __func__ << " " << path << ": " 
-    << stbuf->f_bavail << "/" << stbuf->f_blocks << dendl;
+  ldout(fs->store->cct, 10)
+      << __func__ << " " << path << ": " << stbuf->f_bavail << "/"
+      << stbuf->f_blocks << dendl;
   return 0;
 }
 
 static struct fuse_operations fs_oper = {
-  getattr: os_getattr,
-  readlink: 0,
-  getdir: 0,
-  mknod: 0,
-  mkdir: os_mkdir,
-  unlink: os_unlink,
-  rmdir: os_unlink,
-  symlink: 0,
-  rename: 0,
-  link: 0,
-  chmod: os_chmod,
-  chown: 0,
-  truncate: os_truncate,
-  utime: 0,
-  open: os_open,
-  read: os_read,
-  write: os_write,
-  statfs: os_statfs,
-  flush: os_flush,
-  release: os_release,
-  fsync: 0,
-  setxattr: 0,
-  getxattr: 0,
-  listxattr: 0,
-  removexattr: 0,
-  opendir: 0,
-  readdir: os_readdir,
-  releasedir: 0,
-  fsyncdir: 0,
-  init: 0,
-  destroy: 0,
-  access: 0,
-  create: os_create,
+  getattr : os_getattr,
+  readlink : 0,
+  getdir : 0,
+  mknod : 0,
+  mkdir : os_mkdir,
+  unlink : os_unlink,
+  rmdir : os_unlink,
+  symlink : 0,
+  rename : 0,
+  link : 0,
+  chmod : os_chmod,
+  chown : 0,
+  truncate : os_truncate,
+  utime : 0,
+  open : os_open,
+  read : os_read,
+  write : os_write,
+  statfs : os_statfs,
+  flush : os_flush,
+  release : os_release,
+  fsync : 0,
+  setxattr : 0,
+  getxattr : 0,
+  listxattr : 0,
+  removexattr : 0,
+  opendir : 0,
+  readdir : os_readdir,
+  releasedir : 0,
+  fsyncdir : 0,
+  init : 0,
+  destroy : 0,
+  access : 0,
+  create : os_create,
 };
 
-int FuseStore::main()
-{
+int FuseStore::main() {
   const char *v[] = {
-    "foo",
-    mount_point.c_str(),
-    "-f",
-    "-d", // debug
+      "foo", mount_point.c_str(), "-f",
+      "-d", // debug
   };
   int c = 3;
   auto fuse_debug = store->cct->_conf.get_val<bool>("fuse_debug");
   if (fuse_debug)
     ++c;
-  return fuse_main(c, (char**)v, &fs_oper, (void*)this);
+  return fuse_main(c, (char **)v, &fs_oper, (void *)this);
 }
 
-int FuseStore::start()
-{
+int FuseStore::start() {
   dout(10) << __func__ << dendl;
 
   memset(&info->args, 0, sizeof(info->args));
   const char *v[] = {
-    "foo",
-    mount_point.c_str(),
-    "-f", // foreground
-    "-d", // debug
+      "foo", mount_point.c_str(),
+      "-f", // foreground
+      "-d", // debug
   };
   int c = 3;
   auto fuse_debug = store->cct->_conf.get_val<bool>("fuse_debug");
   if (fuse_debug)
     ++c;
-  fuse_args a = FUSE_ARGS_INIT(c, (char**)v);
+  fuse_args a = FUSE_ARGS_INIT(c, (char **)v);
   info->args = a;
   if (fuse_parse_cmdline(&info->args, &info->mountpoint, NULL, NULL) == -1) {
     derr << __func__ << " failed to parse args" << dendl;
@@ -1196,8 +1101,8 @@ int FuseStore::start()
     return -EIO;
   }
 
-  info->f = fuse_new(info->ch, &info->args, &fs_oper, sizeof(fs_oper),
-		     (void*)this);
+  info->f =
+      fuse_new(info->ch, &info->args, &fs_oper, sizeof(fs_oper), (void *)this);
   if (!info->f) {
     fuse_unmount(info->mountpoint, info->ch);
     derr << __func__ << " fuse_new failed" << dendl;
@@ -1209,8 +1114,7 @@ int FuseStore::start()
   return 0;
 }
 
-int FuseStore::loop()
-{
+int FuseStore::loop() {
   dout(10) << __func__ << " enter" << dendl;
   int r = fuse_loop(info->f);
   if (r)
@@ -1219,8 +1123,7 @@ int FuseStore::loop()
   return r;
 }
 
-int FuseStore::stop()
-{
+int FuseStore::stop() {
   dout(10) << __func__ << " enter" << dendl;
   fuse_unmount(info->mountpoint, info->ch);
   fuse_thread.join();

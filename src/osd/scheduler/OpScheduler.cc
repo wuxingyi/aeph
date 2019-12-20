@@ -21,25 +21,21 @@
 
 namespace ceph::osd::scheduler {
 
-OpSchedulerRef make_scheduler(CephContext *cct)
-{
+OpSchedulerRef make_scheduler(CephContext *cct) {
   const std::string *type = &cct->_conf->osd_op_queue;
   if (*type == "debug_random") {
-    static const std::string index_lookup[] = { "mclock_scheduler",
-						"wpq" };
+    static const std::string index_lookup[] = {"mclock_scheduler", "wpq"};
     srand(time(NULL));
     unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
     type = &index_lookup[which];
   }
 
-  if (*type == "wpq" ) {
+  if (*type == "wpq") {
     // default is 'wpq'
-    return std::make_unique<
-      ClassedOpQueueScheduler<WeightedPriorityQueue<OpSchedulerItem, client>>>(
-	cct,
-	cct->_conf->osd_op_pq_max_tokens_per_priority,
-	cct->_conf->osd_op_pq_min_cost
-    );
+    return std::make_unique<ClassedOpQueueScheduler<
+        WeightedPriorityQueue<OpSchedulerItem, client>>>(
+        cct, cct->_conf->osd_op_pq_max_tokens_per_priority,
+        cct->_conf->osd_op_pq_min_cost);
   } else if (*type == "mclock_scheduler") {
     return std::make_unique<mClockScheduler>(cct);
   } else {
@@ -52,4 +48,4 @@ std::ostream &operator<<(std::ostream &lhs, const OpScheduler &rhs) {
   return lhs;
 }
 
-}
+} // namespace ceph::osd::scheduler
