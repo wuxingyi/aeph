@@ -10091,8 +10091,20 @@ class C_OSD_RepopCommit : public Context {
 public:
   C_OSD_RepopCommit(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
       : pg(pg), repop(repop) {}
-  void finish(int) override { pg->repop_all_committed(repop.get()); }
+  void finish(int) override { pg->repop_all_committed_callback(repop.get()); }
 };
+
+void PrimaryLogPG::repop_all_committed_callback(RepGather *repop) {
+  dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
+           << dendl;
+  repop->all_committed = true;
+  if (!repop->rep_aborted) {
+    if (repop->v != eversion_t()) {
+      recovery_state.complete_write(repop->v, repop->pg_local_last_complete);
+    }
+    eval_repop(repop);
+  }
+}
 
 void PrimaryLogPG::repop_all_committed(RepGather *repop) {
   dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "

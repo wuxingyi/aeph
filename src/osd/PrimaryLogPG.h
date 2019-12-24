@@ -942,6 +942,7 @@ protected:
 
   friend class C_OSD_RepopCommit;
   void repop_all_committed(RepGather *repop);
+  void repop_all_committed_callback(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, OpContext *ctx);
   RepGather *new_repop(
