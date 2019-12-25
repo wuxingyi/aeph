@@ -10092,13 +10092,22 @@ public:
   C_OSD_RepopCommit(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
       : pg(pg), repop(repop) {}
   void finish(int r) override { 
-    if (r == 1) {
-      pg->repop_quorum_committed(repop.get()); 
-    } else if (r == 0) {
       pg->repop_all_committed(repop.get()); 
-    }
   }
 };
+
+class C_OSD_RepopQuorumCommit : public Context {
+  PrimaryLogPGRef pg;
+  boost::intrusive_ptr<PrimaryLogPG::RepGather> repop;
+
+public:
+  C_OSD_RepopQuorumCommit(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
+      : pg(pg), repop(repop) {}
+  void finish(int r) override { 
+      pg->repop_quorum_committed(repop.get()); 
+  }
+};
+
 
 void PrimaryLogPG::repop_quorum_committed(RepGather *repop) {
   dout(10) << __func__ << ": repop tid " << repop->rep_tid << " quorum committed "
@@ -10220,6 +10229,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx) {
   }
 
   Context *on_all_commit = new C_OSD_RepopCommit(this, repop);
+  Context *_on_quorum_commit = new C_OSD_RepopQuorumCommit(this, repop);
   if (!(ctx->log.empty())) {
     ceph_assert(ctx->at_version >= projected_last_update);
     projected_last_update = ctx->at_version;
@@ -10233,7 +10243,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx) {
       soid, ctx->delta_stats, ctx->at_version, std::move(ctx->op_t),
       recovery_state.get_pg_trim_to(),
       recovery_state.get_min_last_complete_ondisk(), ctx->log,
-      ctx->updated_hset_history, on_all_commit, repop->rep_tid, ctx->reqid,
+      ctx->updated_hset_history, on_all_commit, _on_quorum_commit,repop->rep_tid, ctx->reqid,
       ctx->op);
 }
 

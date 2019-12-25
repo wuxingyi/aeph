@@ -106,6 +106,7 @@ public:
     const vector<pg_log_entry_t> &log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     Context *on_all_commit,
+    Context *on_quorum_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
     OpRequestRef op

@@ -386,7 +386,7 @@ void ReplicatedBackend::submit_transaction(
     const eversion_t &trim_to, const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &_log_entries,
     std::optional<pg_hit_set_history_t> &hset_history, Context *on_all_commit,
-    ceph_tid_t tid, osd_reqid_t reqid, OpRequestRef orig_op) {
+    Context *on_quorum_commit, ceph_tid_t tid, osd_reqid_t reqid, OpRequestRef orig_op) {
   parent->apply_stats(soid, delta_stats);
 
   vector<pg_log_entry_t> log_entries(_log_entries);
@@ -399,7 +399,7 @@ void ReplicatedBackend::submit_transaction(
   ceph_assert(removed.size() <= 1);
 
   auto insert_res = in_progress_ops.insert(
-      make_pair(tid, ceph::make_ref<InProgressOp>(tid, on_all_commit, orig_op,
+      make_pair(tid, ceph::make_ref<InProgressOp>(tid, on_all_commit, on_quorum_commit, orig_op,
                                                   at_version)));
   ceph_assert(insert_res.second);
   InProgressOp &op = *insert_res.first->second;
@@ -458,10 +458,10 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp> &op) {
     // primary is committed, if someone else committed, at least quorum committed
     if (op->waiting_for_commit.size() == 1)
     {
-      if (op->on_commit)
+      if (op->on_quorum_commit)
       {
         dout(7) << __func__ <<  "quorum committed, go to quorumcommitted routine" << dendl;
-        op->on_commit->complete(1);
+        op->on_quorum_commit->complete(0);
       }
     }
   }
@@ -528,10 +528,11 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op) {
       //only do further work when primary is committed
       if (!ip_op.waiting_for_commit.count(get_parent()->whoami_shard()))
       {
-        if (ip_op.on_commit)
+        if (ip_op.on_quorum_commit)
         {
           dout(7) << __func__ << ": tid " << tid << " quorum committed, go to quorumcommitted routine" << dendl;
-          ip_op.on_commit->complete(1);
+          ip_op.on_quorum_commit->complete(0);
+          ip_op.on_quorum_commit = 0;
         }
       }
     }

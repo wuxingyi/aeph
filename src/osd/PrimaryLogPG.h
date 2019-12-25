@@ -944,6 +944,7 @@ protected:
   xlist<RepGather*> repop_queue;
 
   friend class C_OSD_RepopCommit;
+  friend class C_OSD_RepopQuorumCommit;
   void repop_all_committed(RepGather *repop);
   void repop_quorum_committed(RepGather *repop);
   void eval_repop(RepGather*);

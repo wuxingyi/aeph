@@ -453,6 +453,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      /// [in] hitset history (if updated with this transaction)
      std::optional<pg_hit_set_history_t> &hset_history,
      Context *on_all_commit,              ///< [in] called when all commit
+     Context *on_quorum_commit,              ///< [in] called when all commit
      ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
      OpRequestRef op                      ///< [in] op

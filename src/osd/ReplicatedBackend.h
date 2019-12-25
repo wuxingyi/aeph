@@ -337,6 +337,7 @@ private:
     ceph_tid_t tid;
     set<pg_shard_t> waiting_for_commit;
     Context *on_commit;
+    Context *on_quorum_commit;
     OpRequestRef op;
     eversion_t v;
     bool done() const {
@@ -344,9 +345,9 @@ private:
     }
   private:
     FRIEND_MAKE_REF(InProgressOp);
-    InProgressOp(ceph_tid_t tid, Context *on_commit, OpRequestRef op, eversion_t v)
+    InProgressOp(ceph_tid_t tid, Context *on_commit, Context *on_quorum_commit, OpRequestRef op, eversion_t v)
       :
-	tid(tid), on_commit(on_commit),
+	tid(tid), on_commit(on_commit), on_quorum_commit(on_quorum_commit),
 	op(op), v(v) {}
   };
   map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
@@ -369,6 +370,7 @@ public:
     const vector<pg_log_entry_t> &log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     Context *on_all_commit,
+    Context *on_quorum_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
     OpRequestRef op

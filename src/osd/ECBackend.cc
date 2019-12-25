@@ -1287,7 +1287,7 @@ void ECBackend::submit_transaction(
     const eversion_t &trim_to, const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &log_entries,
     std::optional<pg_hit_set_history_t> &hset_history, Context *on_all_commit,
-    ceph_tid_t tid, osd_reqid_t reqid, OpRequestRef client_op) {
+    Context *on_quorum_commit, ceph_tid_t tid, osd_reqid_t reqid, OpRequestRef client_op) {
   ceph_assert(!tid_to_op_map.count(tid));
   Op *op = &(tid_to_op_map[tid]);
   op->hoid = hoid;
