@@ -772,6 +772,7 @@ public:
 
     bool rep_aborted;
     bool all_committed;
+    bool quorum_committed;
     
     utime_t   start;
     
@@ -793,6 +794,7 @@ public:
       rep_tid(rt), 
       rep_aborted(false),
       all_committed(false),
+      quorum_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(c->lock_manager)),
       on_committed(std::move(c->on_committed)),
@@ -813,6 +815,7 @@ public:
       rep_tid(rt),
       rep_aborted(false),
       all_committed(false),
+      quorum_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(manager)) {
       if (on_complete) {
@@ -942,7 +945,7 @@ protected:
 
   friend class C_OSD_RepopCommit;
   void repop_all_committed(RepGather *repop);
-  void repop_all_committed_callback(RepGather *repop);
+  void repop_quorum_committed(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, OpContext *ctx);
   RepGather *new_repop(
@@ -1975,6 +1978,7 @@ inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
   out << "repgather(" << &repop
       << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
+      << " quorum_committed?=" << repop.quorum_committed
       << " committed?=" << repop.all_committed
       << " r=" << repop.r
       << ")";

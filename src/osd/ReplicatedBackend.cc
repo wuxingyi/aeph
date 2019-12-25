@@ -452,6 +452,18 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp> &op) {
     op->on_commit->complete(0);
     op->on_commit = 0;
     in_progress_ops.erase(op->tid);
+  } 
+  else 
+  {
+    // primary is committed, if someone else committed, at least quorum committed
+    if (op->waiting_for_commit.size() == 1)
+    {
+      if (op->on_commit)
+      {
+        dout(7) << __func__ <<  "quorum committed, go to quorumcommitted routine" << dendl;
+        op->on_commit->complete(1);
+      }
+    }
   }
 }
 
@@ -469,6 +481,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op) {
   auto iter = in_progress_ops.find(rep_tid);
   if (iter != in_progress_ops.end()) {
     InProgressOp &ip_op = *iter->second;
+    ceph_tid_t tid = ip_op.tid;
     const MOSDOp *m = nullptr;
     if (ip_op.op)
       m = ip_op.op->get_req<MOSDOp>();
@@ -485,24 +498,46 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op) {
     if (r->ack_type & CEPH_OSD_FLAG_ONDISK) {
       ceph_assert(ip_op.waiting_for_commit.count(from));
       ip_op.waiting_for_commit.erase(from);
-      if (ip_op.op) {
+      if (ip_op.op)
+      {
         ip_op.op->mark_event("sub_op_commit_rec");
         ip_op.op->pg_trace.event("sub_op_commit_rec");
       }
-    } else {
+    }
+    else
+    {
       // legacy peer; ignore
     }
 
     parent->update_peer_last_complete_ondisk(from,
                                              r->get_last_complete_ondisk());
 
-    if (ip_op.waiting_for_commit.empty() && ip_op.on_commit) {
-      ip_op.on_commit->complete(0);
-      ip_op.on_commit = 0;
-      in_progress_ops.erase(iter);
+    //all committed, of course including me
+    if (ip_op.waiting_for_commit.empty())
+    {
+      if (ip_op.on_commit)
+      {
+        dout(7) << __func__ << ": tid " << tid << " all committed, go to allcommitted routine" << dendl;
+        ip_op.on_commit->complete(0);
+        ip_op.on_commit = 0;
+        in_progress_ops.erase(iter);
+      }
+    }
+    else
+    {
+      //only do further work when primary is committed
+      if (!ip_op.waiting_for_commit.count(get_parent()->whoami_shard()))
+      {
+        if (ip_op.on_commit)
+        {
+          dout(7) << __func__ << ": tid " << tid << " quorum committed, go to quorumcommitted routine" << dendl;
+          ip_op.on_commit->complete(1);
+        }
+      }
     }
   }
 }
+
 
 int ReplicatedBackend::be_deep_scrub(const hobject_t &poid, ScrubMap &map,
                                      ScrubMapBuilder &pos,

@@ -10091,13 +10091,19 @@ class C_OSD_RepopCommit : public Context {
 public:
   C_OSD_RepopCommit(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
       : pg(pg), repop(repop) {}
-  void finish(int) override { pg->repop_all_committed_callback(repop.get()); }
+  void finish(int r) override { 
+    if (r == 1) {
+      pg->repop_quorum_committed(repop.get()); 
+    } else if (r == 0) {
+      pg->repop_all_committed(repop.get()); 
+    }
+  }
 };
 
-void PrimaryLogPG::repop_all_committed_callback(RepGather *repop) {
-  dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
+void PrimaryLogPG::repop_quorum_committed(RepGather *repop) {
+  dout(10) << __func__ << ": repop tid " << repop->rep_tid << " quorum committed "
            << dendl;
-  repop->all_committed = true;
+  repop->quorum_committed = true;
   if (!repop->rep_aborted) {
     if (repop->v != eversion_t()) {
       recovery_state.complete_write(repop->v, repop->pg_local_last_complete);
@@ -10148,10 +10154,7 @@ void PrimaryLogPG::eval_repop(RepGather *repop) {
   // ondisk?
   if (repop->all_committed) {
     dout(10) << " commit: " << *repop << dendl;
-    for (auto p = repop->on_committed.begin(); p != repop->on_committed.end();
-         repop->on_committed.erase(p++)) {
-      (*p)();
-    }
+   
     // send dup commits, in order
     auto it = waiting_for_ondisk.find(repop->v);
     if (it != waiting_for_ondisk.end()) {
@@ -10185,7 +10188,17 @@ void PrimaryLogPG::eval_repop(RepGather *repop) {
         remove_repop(to_remove);
       }
     }
-  } else {
+  } else if (repop->quorum_committed) 
+  {
+    dout(10) << " quorum commit: " << *repop << dendl;
+    dout(10) << " wuxingyidebug: we are going to reply the client" << dendl;
+    for (auto p = repop->on_committed.begin(); p != repop->on_committed.end();
+         repop->on_committed.erase(p++)) {
+      (*p)();
+    }
+  } 
+  else
+  {
     dout(5) << "wuxingyidebug: eval_repop not all committed yet, not that fast"
             << dendl;
   }
